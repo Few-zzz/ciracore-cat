@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS events (
   id        INTEGER PRIMARY KEY,
   ts        INTEGER NOT NULL,          -- epoch ms จาก CiRA
   cat_count INTEGER NOT NULL,
-  counts    TEXT    NOT NULL,          -- JSON {"resting": 2, ...}
+  counts    TEXT    NOT NULL,          -- JSON {"sleep": 2, "sit": 1, ...}
   cats      TEXT    NOT NULL           -- JSON [{id, behavior, conf, x, y, w, h}]
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);

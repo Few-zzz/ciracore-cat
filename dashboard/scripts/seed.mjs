@@ -12,17 +12,17 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);`);
 
-const BEHAVIORS = ["resting", "moving", "playing", "climbing", "idle"];
-const WEIGHT = [0.55, 0.15, 0.1, 0.08, 0.12];   // แมวนอนเยอะสุด
+const BEHAVIORS = ["sleep", "walk", "play", "sit", "eat", "stand", "poop"];
+const WEIGHT = [0.45, 0.05, 0.1, 0.2, 0.1, 0.07, 0.03];   // แมวนอนเยอะสุด
 const pick = () => {
   let r = Math.random();
   for (let i = 0; i < WEIGHT.length; i++) if ((r -= WEIGHT[i]) < 0) return BEHAVIORS[i];
-  return "idle";
+  return "sleep";
 };
 
 const STEP = 5000;
 const now = Date.now();
-const cats = [0, 1, 2].map((id) => ({ id, behavior: "resting", present: true, x: 400 + id * 500, y: 700 }));
+const cats = [0, 1, 2].map((id) => ({ id, behavior: "sleep", present: true, x: 400 + id * 500, y: 700 }));
 const insert = db.prepare("INSERT INTO events (ts, cat_count, counts, cats) VALUES (?, ?, ?, ?)");
 
 db.exec("BEGIN");

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { COLOR, LABEL, type Behavior } from "@/lib/behaviors";
+import { COLOR, LABEL, objectLabel, type Behavior } from "@/lib/behaviors";
 import { useTheme } from "./useTheme";
 
 import type { Detections } from "@/lib/live";
@@ -114,7 +114,7 @@ export default function LiveVideo() {
             {meta.objects.map((o, i) => (
               <g key={`o${i}`}>
                 <rect x={o.x} y={o.y} width={o.w} height={o.h} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={meta.w / 640} />
-                <Tag fs={meta.w / 64} x={o.x} y={o.y} text={`${o.name} ${Math.round(o.conf * 100)}%`} bg="rgba(0,0,0,0.6)" fg="#ffffff" />
+                <Tag fs={meta.w / 64} x={o.x} y={o.y} text={`${objectLabel(o.name)} ${Math.round(o.conf * 100)}%`} bg="rgba(0,0,0,0.6)" fg="#ffffff" />
               </g>
             ))}
             {meta.cats.map((c) => {

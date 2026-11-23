@@ -208,7 +208,7 @@ export default function Dashboard() {
               const v = data?.catMinutes[b] ?? 0;
               const pct = totalCatMin ? Math.round((v / totalCatMin) * 100) : 0;
               return (
-                <li key={b} className="grid grid-cols-[6rem_1fr] items-center gap-3 text-sm">
+                <li key={b} className="grid grid-cols-[6.5rem_1fr] items-center gap-3 text-sm">
                   <span className="flex items-center gap-2">
                     <Swatch color={colors[b]} /> {LABEL[b]}
                   </span>

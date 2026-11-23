@@ -16,18 +16,26 @@ send_warned = False
 tracks = {}                     # id -> {"c": จุดกลาง, "hist": deque, "miss": จำนวนเฟรมที่หาย}
 next_id = 0
 
-CAT_CONF = 0.75                 # ตัดกล่องแมวมั่นใจต่ำ (กล่อง 57-71% ในภาพแรกเป็นของปลอม)
-DUP_IOU = 0.5                   # กล่องแมวซ้อนกันเกินนี้ถือว่าเป็นตัวเดียวกัน
-MOVE_PX = 30                    # จุดกลางขยับเกินนี้ (พิกเซล/เฟรม) ถือว่าเคลื่อนไหว
+# ชื่อคลาสจากโมเดลใหม่: แมว 1 กล่องบอกพฤติกรรมมาเลย (Cat_Sleep, Cat_Walk, ...)
+# -> ไม่ต้องเดาพฤติกรรมจากการขยับ/สิ่งของรอบตัวแล้ว
+CAT_CLASSES = {
+    "cat_sleep": "sleep", "cat_walk": "walk", "cat_play": "play", "cat_sit": "sit",
+    "cat_eat": "eat", "cat_stand": "stand", "cat_poop": "poop",
+}
+OBJECT_CLASSES = {"bed", "bowl", "poop", "sandbox", "toy"}   # สิ่งของ ส่งไปวาดบนภาพสด
+
+CAT_CONF = 0.7                  # ตัดกล่องแมวมั่นใจต่ำ (ปรับได้ ถ้าเจอกล่องปลอมให้เพิ่ม)
+DUP_IOU = 0.5                   # กล่องแมวซ้อนกันเกินนี้ถือว่าเป็นตัวเดียวกัน (แม้คลาสต่างกัน)
 MATCH_PX = 150                  # ห่างจากเฟรมก่อนไม่เกินนี้ถือว่าเป็นตัวเดิม
 MAX_MISS = 15                   # หายเกินกี่เฟรมจึงลบ track ทิ้ง
-SMOOTH = 10                     # จำนวนเฟรมที่ใช้ majority vote
+SMOOTH = 10                     # จำนวนเฟรมที่ใช้ majority vote กันพฤติกรรมกระพริบ
 
 
 def to_box(o):
     """DeepDetect ให้ x,y เป็นจุดกึ่งกลางกล่อง -> แปลงเป็นมุมซ้ายบน"""
     w, h = o["w"], o["h"]
-    return {"name": o["name"], "conf": float(o["confidence"]),
+    name = str(o["name"]).strip()
+    return {"name": name, "key": name.lower(), "conf": float(o["confidence"]),
             "x": o["x"] - w / 2, "y": o["y"] - h / 2, "w": w, "h": h}
 
 
@@ -37,10 +45,6 @@ def find_objects(dd):
 
 def center(o):
     return (o["x"] + o["w"] / 2, o["y"] + o["h"] / 2)
-
-
-def inside(pt, o):
-    return o["x"] <= pt[0] <= o["x"] + o["w"] and o["y"] <= pt[1] <= o["y"] + o["h"]
 
 
 def iou(a, b):
@@ -57,15 +61,6 @@ def dedupe(cats):
         if all(iou(c, k) < DUP_IOU for k in keep):
             keep.append(c)
     return keep
-
-
-def classify(c, moving, objs):
-    on = {o["name"] for o in objs if o["name"] != "cat" and inside(c, o)}
-    if "cattree" in on:          return "climbing"
-    if "toy" in on and moving:   return "playing"
-    if "bed" in on:              return "moving" if moving else "resting"
-    return "moving" if moving else "idle"
-
 
 def match(cats):
     """จับคู่กล่องแมวกับ track เฟรมก่อน โดยเลือกคู่ที่ใกล้สุดก่อน (greedy)
@@ -104,13 +99,12 @@ def match(cats):
 
 
 def infer(objs):
-    cats = dedupe([o for o in objs if o["name"] == "cat" and o["conf"] >= CAT_CONF])
+    cats = dedupe([o for o in objs if o["key"] in CAT_CLASSES and o["conf"] >= CAT_CONF])
 
     out = []
-    for box, (tid, d) in zip(cats, match(cats)):
-        moving = d is not None and d > MOVE_PX
+    for box, (tid, _) in zip(cats, match(cats)):
         hist = tracks[tid]["hist"]
-        hist.append(classify(center(box), moving, objs))
+        hist.append(CAT_CLASSES[box["key"]])
         out.append({
             "id": tid,
             "behavior": Counter(hist).most_common(1)[0][0],     # majority vote ต่อตัว
@@ -163,7 +157,7 @@ def send_to_dashboard(result, objs, dd, img):
         h = dd.get("im_h") or (img.shape[0] if img is not None else 0)
         others = [{"name": o["name"], "conf": round(o["conf"], 3), "x": round(o["x"]),
                    "y": round(o["y"]), "w": o["w"], "h": o["h"]}
-                  for o in objs if o["name"] != "cat"]
+                  for o in objs if o["key"] in OBJECT_CLASSES]
         post_async("detect", "/api/detections", {"ts": result["ts"], "w": w, "h": h,
                                                   "objects": others, "cats": result["cats"]})
 
