@@ -12,6 +12,7 @@
 |---|---|
 | `cira_raw_video.py` | วางใน Python+ ก่อน DeepDetect ส่งภาพดิบไปแสดงสด |
 | `cira_behavior.py` | วางใน Python+ หลัง DeepDetect แปลงคลาส Cat_* เป็นพฤติกรรม + tracking + ส่งผล |
+| `AI/` | โมเดลที่เทรนใน CiRA (YOLOv4-tiny, 12 คลาส): `train.weights`, `test.cfg`, `obj.names` — ใช้ตั้งค่าโหนด DeepDetect |
 | `google_sheet.gs` | Apps Script วางใน Google Sheet รับ/ส่งข้อมูลรายนาที |
 | `dashboard/` | Next.js dashboard (ดู `dashboard/README.md`) |
 | `docs/` | สไลด์นำเสนอ (`slides.pptx`), System Diagram (`system-diagram.png`, สร้างจาก `make_diagram.py`) |
