@@ -30,7 +30,10 @@ const fmtTime = (t: number, withDate: boolean) =>
     ? { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }
     : { hour: "2-digit", minute: "2-digit" });
 
-const fmtMin = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1)} ชม.` : `${Math.round(m)} นาที`);
+const fmtMin = (m: number) =>
+  m >= 60 ? `${(m / 60).toFixed(1)} ชม.` : m > 0 && m < 1 ? "<1 นาที" : `${Math.round(m)} นาที`;
+
+const fmtPct = (p: number) => (p > 0 && p < 1 ? "<1%" : `${Math.round(p)}%`);
 
 export default function Dashboard() {
   const theme = useTheme();
@@ -39,6 +42,7 @@ export default function Dashboard() {
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [hoverB, setHoverB] = useState<Behavior | null>(null);   // ชี้แถวไหน ไฮไลต์ชิ้นนั้นในโดนัท
 
   useEffect(() => {
     let alive = true;
@@ -68,6 +72,13 @@ export default function Dashboard() {
   const latest = data?.latest;
   const multiDay = range === "7d";
   const totalCatMin = data ? BEHAVIORS.reduce((s, b) => s + data.catMinutes[b], 0) : 0;
+  // สัดส่วนเวลา เรียงมากไปน้อย (สียังผูกกับพฤติกรรมเหมือนเดิม) + รายการที่ไม่พบเลย
+  const share = data
+    ? BEHAVIORS.map((b) => ({ b, v: data.catMinutes[b], pct: totalCatMin ? (data.catMinutes[b] / totalCatMin) * 100 : 0 }))
+        .filter((x) => x.v > 0)
+        .sort((x, y) => y.v - x.v)
+    : [];
+  const absent = data ? BEHAVIORS.filter((b) => !(data.catMinutes[b] > 0)) : [];
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6">
@@ -202,72 +213,73 @@ export default function Dashboard() {
       {/* ---------- เวลารวม + ตารางแมวตอนนี้ ---------- */}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card">
-          <h2 className="text-base font-semibold">เวลารวมแต่ละพฤติกรรม</h2>
-          <p className="mb-3 text-sm text-ink-2">หน่วย แมว·นาที (แมว 2 ตัวนอน 10 นาที = 20)</p>
-          {totalCatMin > 0 ? (
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
-              {/* donut: สัดส่วนเวลาของแต่ละพฤติกรรมในช่วงที่เลือก */}
-              <div className="relative size-48 shrink-0">
+          <h2 className="text-base font-semibold">แมวใช้เวลาทำอะไรบ้าง</h2>
+          <p className="mb-4 text-sm text-ink-2">สัดส่วนเวลาในช่วง {RANGES[range].label} ที่ผ่านมา</p>
+          {share.length > 0 ? (
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+              {/* donut: ชิ้นใหญ่สุดเริ่มที่ 12 นาฬิกา เรียงตามเข็ม */}
+              <div className="relative size-52 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={BEHAVIORS.map((b) => ({ key: b, value: data?.catMinutes[b] ?? 0 })).filter((d) => d.value > 0)}
-                      dataKey="value"
-                      nameKey="key"
-                      innerRadius="62%"
+                      data={share}
+                      dataKey="v"
+                      nameKey="b"
+                      innerRadius="64%"
                       outerRadius="100%"
                       startAngle={90}
                       endAngle={-270}
                       stroke="var(--surface)"
                       strokeWidth={2}
                       isAnimationActive={false}
+                      onMouseEnter={(_, i) => setHoverB(share[i].b)}
+                      onMouseLeave={() => setHoverB(null)}
                     >
-                      {BEHAVIORS.filter((b) => (data?.catMinutes[b] ?? 0) > 0).map((b) => (
-                        <Cell key={b} fill={colors[b]} />
+                      {share.map((x) => (
+                        <Cell key={x.b} fill={colors[x.b]} fillOpacity={hoverB && hoverB !== x.b ? 0.25 : 1} />
                       ))}
                     </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const b = payload[0].payload.key as Behavior;
-                        const v = payload[0].payload.value as number;
-                        return (
-                          <div className="card !p-2 text-sm shadow-md">
-                            <p className="flex items-center gap-2 font-semibold">
-                              <Swatch color={colors[b]} /> {LABEL[b]}
-                            </p>
-                            <p className="tnum text-ink-2">
-                              {Math.round(v).toLocaleString()} แมว·นาที · {Math.round((v / totalCatMin) * 100)}%
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-                  <p>
-                    <span className="tnum block text-xl font-semibold">{fmtMin(totalCatMin)}</span>
-                    <span className="text-xs text-ink-2">แมว·เวลารวม</span>
-                  </p>
-                </div>
-              </div>
-              <ul className="flex w-full flex-col gap-1.5">
-                {BEHAVIORS.map((b) => {
-                  const v = data?.catMinutes[b] ?? 0;
-                  const pct = (v / totalCatMin) * 100;
+                {/* กลางโดนัท: พฤติกรรมที่ชี้อยู่ หรือที่มากที่สุด */}
+                {(() => {
+                  const c = share.find((x) => x.b === hoverB) ?? share[0];
                   return (
-                    <li key={b} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="flex items-center gap-2">
-                        <Swatch color={colors[b]} /> {LABEL[b]}
-                      </span>
-                      <span className="tnum whitespace-nowrap text-ink-2">
-                        {Math.round(v).toLocaleString()} · {pct > 0 && pct < 1 ? "<1" : Math.round(pct)}%
-                      </span>
-                    </li>
+                    <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                      <p>
+                        <span className="tnum block text-3xl font-semibold">{fmtPct(c.pct)}</span>
+                        <span className="text-sm text-ink-2">{LABEL[c.b]}</span>
+                      </p>
+                    </div>
                   );
-                })}
-              </ul>
+                })()}
+              </div>
+
+              <div className="w-full">
+                <ul className="flex flex-col">
+                  {share.map((x) => (
+                    <li
+                      key={x.b}
+                      onMouseEnter={() => setHoverB(x.b)}
+                      onMouseLeave={() => setHoverB(null)}
+                      className={`flex items-center gap-3 rounded-md px-2 py-1.5 transition-opacity ${
+                        hoverB && hoverB !== x.b ? "opacity-40" : ""
+                      } hover:bg-hover`}
+                    >
+                      <Swatch color={colors[x.b]} />
+                      <span className="flex-1 text-sm">{LABEL[x.b]}</span>
+                      <span className="tnum text-xs text-ink-2">{fmtMin(x.v)}</span>
+                      <span className="tnum w-12 text-right text-base font-semibold">{fmtPct(x.pct)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {absent.length > 0 && (
+                  <p className="mt-2 px-2 text-xs text-ink-2">ไม่พบในช่วงนี้: {absent.map((b) => LABEL[b]).join(" · ")}</p>
+                )}
+                <p className="mt-3 border-t border-line px-2 pt-2 text-xs text-ink-2">
+                  เวลานับรวมทุกตัว เช่น แมว 2 ตัวนอนพร้อมกัน 10 นาที = นอน 20 นาที
+                </p>
+              </div>
             </div>
           ) : (
             <p className="text-sm text-ink-2">ยังไม่มีข้อมูลในช่วงนี้</p>
