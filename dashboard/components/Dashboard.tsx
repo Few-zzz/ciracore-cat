@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BEHAVIORS, COLOR, LABEL, RANGES, type Behavior, type RangeKey } from "@/lib/behaviors";
 import LiveVideo from "./LiveVideo";
 import { useTheme } from "./useTheme";
@@ -67,7 +67,6 @@ export default function Dashboard() {
   const latest = data?.latest;
   const multiDay = range === "7d";
   const totalCatMin = data ? BEHAVIORS.reduce((s, b) => s + data.catMinutes[b], 0) : 0;
-  const maxCatMin = data ? Math.max(1, ...BEHAVIORS.map((b) => data.catMinutes[b])) : 1;
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6">
@@ -203,28 +202,74 @@ export default function Dashboard() {
         <section className="card">
           <h2 className="text-base font-semibold">เวลารวมแต่ละพฤติกรรม</h2>
           <p className="mb-3 text-sm text-ink-2">หน่วย แมว·นาที (แมว 2 ตัวนอน 10 นาที = 20)</p>
-          <ul className="flex flex-col gap-2.5">
-            {BEHAVIORS.map((b) => {
-              const v = data?.catMinutes[b] ?? 0;
-              const pct = totalCatMin ? Math.round((v / totalCatMin) * 100) : 0;
-              return (
-                <li key={b} className="grid grid-cols-[6.5rem_1fr] items-center gap-3 text-sm">
-                  <span className="flex items-center gap-2">
-                    <Swatch color={colors[b]} /> {LABEL[b]}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-4 rounded-r"
-                      style={{ width: `${(v / maxCatMin) * 75}%`, minWidth: v ? 2 : 0, background: colors[b] }}
+          {totalCatMin > 0 ? (
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              {/* donut: สัดส่วนเวลาของแต่ละพฤติกรรมในช่วงที่เลือก */}
+              <div className="relative size-48 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={BEHAVIORS.map((b) => ({ key: b, value: data?.catMinutes[b] ?? 0 })).filter((d) => d.value > 0)}
+                      dataKey="value"
+                      nameKey="key"
+                      innerRadius="62%"
+                      outerRadius="100%"
+                      startAngle={90}
+                      endAngle={-270}
+                      stroke="var(--surface)"
+                      strokeWidth={2}
+                      isAnimationActive={false}
+                    >
+                      {BEHAVIORS.filter((b) => (data?.catMinutes[b] ?? 0) > 0).map((b) => (
+                        <Cell key={b} fill={colors[b]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.length) return null;
+                        const b = payload[0].payload.key as Behavior;
+                        const v = payload[0].payload.value as number;
+                        return (
+                          <div className="card !p-2 text-sm shadow-md">
+                            <p className="flex items-center gap-2 font-semibold">
+                              <Swatch color={colors[b]} /> {LABEL[b]}
+                            </p>
+                            <p className="tnum text-ink-2">
+                              {Math.round(v).toLocaleString()} แมว·นาที · {Math.round((v / totalCatMin) * 100)}%
+                            </p>
+                          </div>
+                        );
+                      }}
                     />
-                    <span className="tnum whitespace-nowrap text-ink-2">
-                      {Math.round(v).toLocaleString()} · {pct}%
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                  <p>
+                    <span className="tnum block text-xl font-semibold">{fmtMin(totalCatMin)}</span>
+                    <span className="text-xs text-ink-2">แมว·เวลารวม</span>
+                  </p>
+                </div>
+              </div>
+              <ul className="flex w-full flex-col gap-1.5">
+                {BEHAVIORS.map((b) => {
+                  const v = data?.catMinutes[b] ?? 0;
+                  const pct = (v / totalCatMin) * 100;
+                  return (
+                    <li key={b} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex items-center gap-2">
+                        <Swatch color={colors[b]} /> {LABEL[b]}
+                      </span>
+                      <span className="tnum whitespace-nowrap text-ink-2">
+                        {Math.round(v).toLocaleString()} · {pct > 0 && pct < 1 ? "<1" : Math.round(pct)}%
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-2">ยังไม่มีข้อมูลในช่วงนี้</p>
+          )}
         </section>
 
         <section className="card">
