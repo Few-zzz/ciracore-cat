@@ -1,5 +1,6 @@
 import { db, type EventRow } from "@/lib/db";
 import { BEHAVIORS, RANGES, type RangeKey } from "@/lib/behaviors";
+import { pullFromSheet, sheetStatus } from "@/lib/sheets";
 
 const GAP_CAP_MS = 60_000;   // ช่องว่างเกินนี้ถือว่าไม่มีข้อมูล (CiRA ปิด) ไม่นับเวลา
 const STALE_MS = 30_000;     // ไม่มีข้อมูลใหม่เกินนี้ถือว่าขาดการเชื่อมต่อ
@@ -8,6 +9,8 @@ const STALE_MS = 30_000;     // ไม่มีข้อมูลใหม่เ
 export async function GET(request: Request) {
   const key = (new URL(request.url).searchParams.get("range") ?? "1h") as RangeKey;
   const range = RANGES[key] ?? RANGES["1h"];
+  // เปิดเว็บ -> ดึงนาทีที่ขาดจาก Google Sheet มาเติมก่อน (เว้นช่วงทุก 5 นาที ไม่ดึงทุกครั้งที่ poll)
+  await pullFromSheet();
   const now = Date.now();
   const from = now - range.ms;
 
@@ -63,5 +66,6 @@ export async function GET(request: Request) {
     monitoredMinutes: +(monitoredMs / 60_000).toFixed(1),
     absentMinutes: +(absentMs / 60_000).toFixed(1),
     samples: rows.length,
+    sheet: sheetStatus(),
   });
 }

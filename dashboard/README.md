@@ -5,7 +5,8 @@
 ```
 CiRA CORE: DeepDetect → Python+ (cira_behavior.py)
    ├─ POST /api/events  ทุก 5 วินาที  → บันทึกลง SQLite (data/cat.db)
-   └─ POST /api/frame   ~5 fps        → เก็บเฉพาะเฟรมล่าสุดในหน่วยความจำ
+   ├─ POST /api/frame   ≤30 fps       → เก็บเฉพาะเฟรมล่าสุดในหน่วยความจำ
+   └─ Google Sheet      ทุก 1 นาที    → เว็บดึงนาทีที่ขาดกลับมาเติม SQLite (lib/sheets.ts)
 Next.js:  GET /api/summary?range=1h|6h|24h|7d   สรุปสำหรับกราฟ
           GET /api/frame?after=<seq>             เฟรมสด + กล่องตรวจจับ
 ```
@@ -31,4 +32,5 @@ npm run dev          # เปิด http://localhost:3000
 | `app/api/frame/route.ts` | รับ/ส่งภาพสด |
 | `app/api/summary/route.ts` | รวมข้อมูลตามช่วงเวลา |
 | `components/Dashboard.tsx` | หน้า dashboard |
-| `components/LiveVideo.tsx` | ภาพสด + ปุ่มสลับแสดงการตรวจจับ |
+| `components/LiveVideo.tsx` | ภาพสด + fps + ปุ่มสลับแสดงการตรวจจับ |
+| `lib/sheets.ts` + `instrumentation.ts` | ดึงข้อมูลจาก Google Sheet (ตั้งค่าใน `.env.local`) |

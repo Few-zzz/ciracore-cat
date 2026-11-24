@@ -20,6 +20,7 @@ type Summary = {
   monitoredMinutes: number;
   absentMinutes: number;
   samples: number;
+  sheet: { enabled: boolean; lastPullAt: number | null; lastMinute: number; restored: number; error: string | null };
 };
 
 const POLL_MS = 5000;
@@ -75,6 +76,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-semibold">พฤติกรรมแมว</h1>
           <Status stale={data?.stale ?? true} error={error} lastTs={latest?.ts} />
+          {data?.sheet.enabled && <SheetLine s={data.sheet} />}
         </div>
         <div role="group" aria-label="ช่วงเวลา" className="flex rounded-lg border border-line bg-surface p-0.5 text-sm">
           {(Object.keys(RANGES) as RangeKey[]).map((k) => (
@@ -376,6 +378,22 @@ function Status({ stale, error, lastTs }: { stale: boolean; error: boolean; last
           : lastTs
             ? `ไม่มีข้อมูลใหม่ตั้งแต่ ${fmtTime(lastTs, true)}`
             : "ยังไม่มีข้อมูลจาก CiRA CORE"}
+    </p>
+  );
+}
+
+// สถานะการดึงข้อมูลจาก Google Sheet (cira_behavior.py เป็นคนบันทึก)
+function SheetLine({ s }: { s: Summary["sheet"] }) {
+  return (
+    <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-2" title={s.error ?? undefined}>
+      <span aria-hidden style={{ color: s.error ? "var(--warning)" : "var(--good)" }}>
+        {s.error ? "▲" : "●"}
+      </span>
+      {s.error
+        ? "ดึงข้อมูลจาก Google Sheet ไม่สำเร็จ (ชี้เพื่อดูสาเหตุ)"
+        : s.lastPullAt
+          ? `Google Sheet: ข้อมูลถึง ${s.lastMinute ? fmtTime(s.lastMinute, true) : "–"} · เติมจาก Sheet ${s.restored} นาที`
+          : "กำลังดึงข้อมูลจาก Google Sheet…"}
     </p>
   );
 }

@@ -6,6 +6,7 @@ import { useTheme } from "./useTheme";
 import type { Detections } from "@/lib/live";
 
 const NO_FRAME_MS = 5000;
+const FPS_WINDOW_MS = 3000;   // เฉลี่ย fps จาก 3 วินาทีล่าสุด (ตัวเลขไม่กระโดด)
 
 export default function LiveVideo() {
   const theme = useTheme();
@@ -16,16 +17,23 @@ export default function LiveVideo() {
   const [now, setNow] = useState(0);
   const [showDetect, setShowDetect] = useState(true);
   const urlRef = useRef<string | null>(null);
+  const [fps, setFps] = useState({ frame: 0, detect: 0 });
 
-  // ดึงเฟรมใหม่ต่อเนื่อง: ขอเฟรมถัดไปหลังเฟรมก่อนโหลดเสร็จ (ไม่ยิงซ้อน)
+  // ดึงเฟรมใหม่ต่อเนื่อง: server ถือคำขอไว้จนมีเฟรมใหม่ (long-poll) แล้วขอเฟรมถัดไปทันที
+  // จึงได้ fps เท่าที่ CiRA ส่งมา ไม่ยิงซ้อน
   useEffect(() => {
     let alive = true;
     let seq = -1;
+    // เวลาที่ได้เฟรมใหม่ / ได้กล่องตรวจจับชุดใหม่ (นับ fps จาก FPS_WINDOW_MS ล่าสุด)
+    const frameTimes: number[] = [];
+    const detectTimes: number[] = [];
+    let lastMetaTs: number | null = null;
     async function loop() {
       while (alive) {
         try {
           const res = await fetch(`/api/frame?after=${seq}`, { cache: "no-store" });
-          if (res.status === 200) {
+          if (res.status !== 200) continue;   // 204 = รอครบ 1 วิแล้วยังไม่มีเฟรม ขอใหม่
+          {
             seq = Number(res.headers.get("X-Seq"));
             // กล่องล่าสุดจาก cira_behavior.py (null = ไม่มี/เก่าเกิน)
             const m = JSON.parse(decodeURIComponent(res.headers.get("X-Meta") ?? "null")) as Detections | null;
@@ -34,16 +42,31 @@ export default function LiveVideo() {
             urlRef.current = url;
             setSrc(url);
             setMeta(m);
-            setLastAt(Date.now());
+            const t = Date.now();
+            setLastAt(t);
+            frameTimes.push(t);
+            // กล่องชุดเดิมแนบมากับหลายเฟรมได้ นับเฉพาะตอน ts เปลี่ยน
+            if (m && m.ts !== lastMetaTs) {
+              lastMetaTs = m.ts;
+              detectTimes.push(t);
+            }
           }
         } catch {
-          /* เซิร์ฟเวอร์รีสตาร์ท ลองใหม่รอบหน้า */
+          // เซิร์ฟเวอร์รีสตาร์ท พักก่อนลองใหม่ ไม่ยิงรัว
+          await new Promise((r) => setTimeout(r, 1000));
         }
-        await new Promise((r) => setTimeout(r, 150));
       }
     }
     loop();
-    const tick = setInterval(() => setNow(Date.now()), 1000);
+    const rate = (times: number[], t: number) => {
+      while (times.length && times[0] < t - FPS_WINDOW_MS) times.shift();
+      return (times.length * 1000) / FPS_WINDOW_MS;
+    };
+    const tick = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      setFps({ frame: rate(frameTimes, t), detect: rate(detectTimes, t) });
+    }, 1000);
     return () => {
       alive = false;
       clearInterval(tick);
@@ -66,6 +89,11 @@ export default function LiveVideo() {
             />
             {live ? "LIVE" : src ? "ภาพหยุด" : "ยังไม่มีภาพ"}
           </span>
+          {live && (
+            <span className="tnum text-sm text-ink-2" title="เฉลี่ย 3 วินาทีล่าสุด ที่เบราว์เซอร์ได้รับจริง">
+              · ภาพ {fps.frame.toFixed(1)} fps · ตรวจจับ {fps.detect.toFixed(1)} fps
+            </span>
+          )}
         </div>
         <div role="group" aria-label="โหมดแสดงผล" className="flex rounded-lg border border-line p-0.5 text-sm">
           {[

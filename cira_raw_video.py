@@ -5,7 +5,7 @@ import time, json, base64, threading, urllib.request
 import cv2
 
 SERVER = "http://127.0.0.1:3000"
-FRAME_FPS = 5                   # ส่งภาพกี่เฟรม/วินาที
+FRAME_FPS = 30                  # ส่งภาพกี่เฟรม/วินาที (ได้จริงไม่เกินความเร็วของ flow ใน CiRA)
 FRAME_W = 960                   # ย่อภาพก่อนส่ง ลดขนาด
 last_frame = 0.0
 busy = {"frame": False}         # ถ้ายังส่งเฟรมก่อนไม่เสร็จ ข้ามไปเลย ไม่ให้ค้าง

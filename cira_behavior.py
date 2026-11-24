@@ -13,6 +13,18 @@ last_detect = 0.0
 busy = {"event": False, "detect": False}   # ถ้ายังส่งอันก่อนไม่เสร็จ ข้ามไปเลย ไม่ให้ค้าง
 send_warned = False
 
+# ---- บันทึกลง Google Sheet (ผ่าน Apps Script: google_sheet.gs) ----
+# วาง URL ของ Web app (ลงท้าย /exec) และรหัสลับเดียวกับที่ตั้งใน Apps Script; เว้นว่าง = ไม่บันทึก
+SHEET_URL = "https://script.google.com/macros/s/AKfycbwVHxbeS7s3Pk6bskdY2apj0VRTr0GpJVqtG0COEWA9FPrKNliLAtANecBsC3dmAYR6/exec"
+SHEET_SECRET = "cat-2026-xyz789"
+# หัวตาราง: ค่าพฤติกรรม = จำนวนแมวเฉลี่ยในนาทีนั้น (เช่น sleep 1.5 = นอนเฉลี่ย 1 ตัวครึ่ง)
+SHEET_HEAD = ["minute_ts", "datetime", "monitored_s", "cat_count",
+              "sleep", "walk", "play", "sit", "eat", "stand", "poop"]
+sheet_acc = None                # ผลรวมของนาทีปัจจุบัน
+sheet_pending = []              # แถวที่ยังส่งไม่สำเร็จ (ส่งใหม่รอบหน้า)
+sheet_busy = False
+sheet_warned = False
+
 tracks = {}                     # id -> {"c": จุดกลาง, "hist": deque, "miss": จำนวนเฟรมที่หาย}
 next_id = 0
 
@@ -162,6 +174,66 @@ def send_to_dashboard(result, objs, dd, img):
                                                   "objects": others, "cats": result["cats"]})
 
 
+def sheet_record(result):
+    """เก็บผลทุกเฟรมไว้รวมเป็นรายนาที พอขึ้นนาทีใหม่ค่อยส่งแถวของนาทีก่อนขึ้น Sheet (1 แถว/นาที)"""
+    global sheet_acc
+    if not SHEET_URL:
+        return
+    now = time.time()
+    minute = int(now // 60) * 60
+    if sheet_acc and sheet_acc["minute"] != minute:
+        a = sheet_acc
+        n = a["frames"]
+        data = []
+        for key in SHEET_HEAD:
+            if key == "minute_ts":
+                data.append(a["minute"] * 1000)
+            elif key == "datetime":
+                data.append(time.strftime("%Y-%m-%d %H:%M", time.localtime(a["minute"])))
+            elif key == "monitored_s":
+                data.append(len(a["seconds"]))          # มีข้อมูลกี่วินาทีในนาทีนี้
+            else:
+                data.append(round(a["sum"].get(key, 0) / n, 3))
+        sheet_pending.append(data)
+        del sheet_pending[:-1440]                       # เก็บค้างได้ไม่เกิน 1 วัน กันหน่วยความจำบวม
+        sheet_acc = None
+        sheet_send()
+    if sheet_acc is None:
+        sheet_acc = {"minute": minute, "frames": 0, "seconds": set(), "sum": Counter()}
+    sheet_acc["frames"] += 1
+    sheet_acc["seconds"].add(int(now))
+    sheet_acc["sum"]["cat_count"] += result["cat_count"]
+    sheet_acc["sum"].update(result["counts"])
+
+
+def sheet_send():
+    """ส่งแถวที่ค้างทั้งหมดใน thread แยก (Apps Script ตอบช้า 1-3 วิ ไม่ให้ flow ของ CiRA ค้าง)"""
+    global sheet_busy
+    if sheet_busy or not sheet_pending:
+        return
+    sheet_busy = True
+    rows = list(sheet_pending)
+
+    def run():
+        global sheet_busy, sheet_warned
+        try:
+            body = json.dumps({"secret": SHEET_SECRET, "rows": rows}).encode()
+            req = urllib.request.Request(SHEET_URL, data=body, headers={"Content-Type": "text/plain"})
+            res = json.loads(urllib.request.urlopen(req, timeout=30).read())
+            if res.get("error"):
+                raise RuntimeError(res["error"])
+            del sheet_pending[:len(rows)]               # ส่งสำเร็จ ลบออกจากคิว
+            sheet_warned = False
+        except Exception as e:
+            if not sheet_warned:
+                print("send to Google Sheet failed (retry next minute):", repr(e))   # ภาษาอังกฤษ: console บางเครื่องพิมพ์ไทยไม่ได้
+                sheet_warned = True
+        finally:
+            sheet_busy = False
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def handle_request(req):
     payload, img = getReqData(req)
 
@@ -174,6 +246,7 @@ def handle_request(req):
         result = infer(objs)
         root["CatBehavior"] = result                    # ส่งต่อให้โหนดถัดไป
         send_to_dashboard(result, objs, dd, img)
+        sheet_record(result)
 
         if img is not None:     # เขียนพฤติกรรมลงภาพ ไว้ดูใน Debug
             for c in result["cats"]:
