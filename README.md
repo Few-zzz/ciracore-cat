@@ -20,11 +20,10 @@
 ## ติดตั้งบนเครื่องใหม่
 
 1. ติดตั้ง [Node.js 24+](https://nodejs.org) (ใช้ `node:sqlite` ในตัว ไม่ต้องลงฐานข้อมูลเพิ่ม)
-2. โหลด repo แล้วสลับไป branch นี้
+2. โหลด repo (branch `main` คือเวอร์ชันล่าสุด; เวอร์ชันเก่าที่ใช้กฎเดาพฤติกรรมอยู่ที่ branch `old-version`)
    ```bash
    git clone https://github.com/Few-zzz/ciracore-cat.git
    cd ciracore-cat
-   git checkout new-behavior-classes
    cd dashboard
    npm install
    npm run dev          # เปิด http://localhost:3000
